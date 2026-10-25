@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Frota">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#0f766e">
+<title>Gestão de Frota</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#f3f6f5; --card:#ffffff; --ink:#14231f; --muted:#5d6f69; --line:#dce5e1;
+  --brand:#0f766e; --brand-ink:#ffffff;
+  --warn:#9a5b00; --warnbg:#fff3dc; --bad:#b42318; --badbg:#fde8e6; --ok:#127a46; --okbg:#e3f5ea;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --bg:#0d1513; --card:#16211e; --ink:#e8f1ee; --muted:#9bb0a9; --line:#26362f;
+    --brand:#2bb3a6; --brand-ink:#06201c;
+    --warn:#f2b75b; --warnbg:#3a2c12; --bad:#ff9d94; --badbg:#3b1b18; --ok:#7fdca5; --okbg:#143023; }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  padding-bottom:calc(76px + env(safe-area-inset-bottom))}
+h1{font-size:20px;margin:0}
+h2{font-size:15px;margin:22px 4px 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.muted{color:var(--muted)}
+header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);
+  padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;justify-content:space-between}
+header button{background:none;border:1px solid var(--line);color:var(--muted);border-radius:10px;padding:6px 12px;font-size:14px}
+main{padding:4px 16px 16px;max-width:720px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin:10px 0}
+details.card summary{font-weight:600;cursor:pointer;list-style:none;color:var(--brand)}
+details.card summary::-webkit-details-marker{display:none}
+details.card[open] summary{margin-bottom:12px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.stat{background:var(--bg);border-radius:12px;padding:10px 12px}
+.stat b{display:block;font-size:20px}
+.stat span{font-size:13px;color:var(--muted)}
+.item{display:flex;gap:10px;justify-content:space-between;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line)}
+.item:first-child{border-top:0}
+.item .t{font-weight:600}
+.item .s{font-size:14px;color:var(--muted)}
+.badge{display:inline-block;font-size:12px;font-weight:700;border-radius:999px;padding:3px 9px;white-space:nowrap}
+.badge.bad{background:var(--badbg);color:var(--bad)}
+.badge.warn{background:var(--warnbg);color:var(--warn)}
+.badge.ok{background:var(--okbg);color:var(--ok)}
+.right{text-align:right;white-space:nowrap}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:14px;font-weight:600;margin-bottom:4px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+input,select{width:100%;font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 12px;min-height:46px}
+input:focus,select:focus{outline:2px solid var(--brand);outline-offset:0}
+button.primary{width:100%;background:var(--brand);color:var(--brand-ink);border:0;border-radius:12px;padding:13px;font:inherit;font-weight:700;min-height:48px}
+button.primary:disabled{opacity:.6}
+.calc{background:var(--bg);border-radius:12px;padding:10px 12px;font-size:14px;margin-bottom:12px;color:var(--muted)}
+.calc b{color:var(--ink)}
+.msg{font-size:14px;border-radius:10px;padding:10px 12px;margin:8px 0}
+.msg.err{background:var(--badbg);color:var(--bad)}
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;
+  padding:6px 8px calc(6px + env(safe-area-inset-bottom));z-index:6}
+nav button{flex:1;background:none;border:0;color:var(--muted);font:inherit;font-size:12px;padding:6px 0;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button .ic{font-size:22px;line-height:1}
+nav button.on{color:var(--brand);font-weight:700}
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+#login .card{width:100%;max-width:380px;padding:22px}
+.toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);
+  padding:10px 16px;border-radius:12px;font-size:14px;z-index:20;max-width:90%}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login" hidden>
+  <div class="card">
+    <h1>🚚 Gestão de Frota</h1>
+    <p class="muted" style="margin:6px 0 18px">Entre com seu e-mail e senha.</p>
+    <form id="f-login">
+      <div class="field"><label for="l-email">E-mail</label>
+        <input id="l-email" type="email" autocomplete="username" autocapitalize="none" required></div>
+      <div class="field"><label for="l-senha">Senha</label>
+        <input id="l-senha" type="password" autocomplete="current-password" required></div>
+      <div id="l-erro" class="msg err" hidden></div>
+      <button class="primary" type="submit">Entrar</button>
+    </form>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app" hidden>
+  <header>
+    <h1 id="titulo">Início</h1>
+    <button id="btn-sair" type="button">Sair</button>
+  </header>
+
+  <main>
+    <section id="view-home"></section>
+
+    <section id="view-viagens" hidden>
+      <details id="nova-viagem" class="card">
+        <summary>＋ Nova viagem / abastecimento</summary>
+        <form id="f-viagem" autocomplete="off">
+          <div class="field"><label for="v-veiculo">Veículo</label><select id="v-veiculo" required></select></div>
+          <div class="field"><label for="v-motorista">Motorista</label><select id="v-motorista" required></select></div>
+          <div class="field"><label for="v-data">Data</label><input id="v-data" type="date" required></div>
+          <div class="row">
+            <div class="field"><label for="v-de">Ponto inicial</label><input id="v-de" type="text" required></div>
+            <div class="field"><label for="v-ate">Ponto final</label><input id="v-ate" type="text" required></div>
+          </div>
+          <div class="row">
+            <div class="field"><label for="v-kmi">KM inicial</label><input id="v-kmi" type="text" inputmode="decimal" required></div>
+            <div class="field"><label for="v-kmf">KM final</label><input id="v-kmf" type="text" inputmode="decimal" required></div>
+          </div>
+          <div class="field"><label for="v-comb">Combustível</label>
+            <select id="v-comb">
+              <option value="gasolina">Gasolina</option><option value="etanol">Etanol</option>
+              <option value="diesel">Diesel</option><option value="gnv">GNV</option><option value="flex_outro">Outro</option>
+            </select></div>
+          <div class="row">
+            <div class="field"><label for="v-litros">Litros</label><input id="v-litros" type="text" inputmode="decimal" required></div>
+            <div class="field"><label for="v-valor">Valor total (R$)</label><input id="v-valor" type="text" inputmode="decimal" required></div>
+          </div>
+          <div id="calc" class="calc">Preencha KM e litros para ver os cálculos.</div>
+          <div id="v-erro" class="msg err" hidden></div>
+          <button class="primary" type="submit">Salvar viagem</button>
+        </form>
+      </details>
+      <h2>Últimas viagens</h2>
+      <div id="lista-viagens"></div>
+    </section>
+
+    <section id="view-cadastros" hidden>
+      <details class="card">
+        <summary>＋ Novo veículo</summary>
+        <form id="f-veiculo" autocomplete="off">
+          <div class="field"><label for="c-modelo">Modelo</label><input id="c-modelo" type="text" required></div>
+          <div class="row">
+            <div class="field"><label for="c-ano">Ano</label><input id="c-ano" type="text" inputmode="numeric" maxlength="4" required></div>
+            <div class="field"><label for="c-placa">Placa</label><input id="c-placa" type="text" maxlength="8" autocapitalize="characters" required></div>
+          </div>
+          <div class="field"><label for="c-km">KM atual do veículo</label><input id="c-km" type="text" inputmode="decimal" required></div>
+          <div id="c-erro" class="msg err" hidden></div>
+          <button class="primary" type="submit">Salvar veículo</button>
+        </form>
+      </details>
+      <h2>Veículos</h2>
+      <div id="lista-veiculos"></div>
+
+      <details class="card">
+        <summary>＋ Novo motorista</summary>
+        <form id="f-motorista" autocomplete="off">
+          <div class="field"><label for="m-nome">Nome</label><input id="m-nome" type="text" required></div>
+          <div class="row">
+            <div class="field"><label for="m-cat">Categoria CNH</label>
+              <select id="m-cat"><option>A</option><option>B</option><option>C</option><option>D</option><option>E</option>
+              <option>AB</option><option>AC</option><option>AD</option><option>AE</option></select></div>
+            <div class="field"><label for="m-venc">Vencimento CNH</label><input id="m-venc" type="date" required></div>
+          </div>
+          <div id="m-erro" class="msg err" hidden></div>
+          <button class="primary" type="submit">Salvar motorista</button>
+        </form>
+      </details>
+      <h2>Motoristas</h2>
+      <div id="lista-motoristas"></div>
+    </section>
+  </main>
+
+  <nav>
+    <button data-tab="home" class="on"><span class="ic">🏠</span>Início</button>
+    <button data-tab="viagens"><span class="ic">⛽</span>Viagens</button>
+    <button data-tab="cadastros"><span class="ic">🗂️</span>Cadastros</button>
+  </nav>
+</div>
+
+<script>
+/* ============ CONFIGURAÇÃO ============ */
+const SUPABASE_URL = 'https://wmsfcwwswokoxyhezrzj.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_uN97rIO46S1lYv0x2ypfCw_QvcWArKF';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/* ============ UTILITÁRIOS ============ */
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const brl = n => n == null ? '—' : Number(n).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+const fmt = (n, d = 1) => n == null ? '—' : Number(n).toLocaleString('pt-BR', {minimumFractionDigits:d, maximumFractionDigits:d});
+const dataBR = s => s ? String(s).slice(0,10).split('-').reverse().join('/') : '—';
+const hoje = () => new Date().toLocaleDateString('en-CA');
+const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const mesBR = s => { const [y, m] = String(s).split('-'); return `${MESES[+m - 1]} de ${y}`; };
+
+// Aceita "12,5", "12.5" e "52.000"
+function parseNum(v) {
+  let s = String(v ?? '').trim();
+  if (!s) return null;
+  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+
+function toast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2600);
+}
+function showErr(id, msg) { const e = $(id); e.textContent = msg; e.hidden = !msg; }
+function traduzErro(e) {
+  const m = (e && e.message) || String(e);
+  if (/veiculos_placa_key|duplicate key/i.test(m)) return 'Esta placa já está cadastrada.';
+  if (/ck_km_final_maior/.test(m)) return 'O KM final não pode ser menor que o KM inicial.';
+  if (/row-level security|permission denied/i.test(m)) return 'Sem permissão. Saia e entre novamente.';
+  if (/Failed to fetch|NetworkError/i.test(m)) return 'Sem conexão com a internet.';
+  return m;
+}
+
+/* ============ LOGIN / SESSÃO ============ */
+async function init() {
+  const { data } = await sb.auth.getSession();
+  data.session ? entrarNoApp() : mostrarLogin();
+  sb.auth.onAuthStateChange((ev, session) => {
+    if (ev === 'SIGNED_OUT') mostrarLogin();
+  });
+}
+function mostrarLogin() { $('#app').hidden = true; $('#login').hidden = false; }
+function entrarNoApp() { $('#login').hidden = true; $('#app').hidden = false; trocarAba('home'); }
+
+$('#f-login').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = e.submitter; btn.disabled = true; showErr('#l-erro', '');
+  const { error } = await sb.auth.signInWithPassword({ email: $('#l-email').value.trim(), password: $('#l-senha').value });
+  btn.disabled = false;
+  if (error) return showErr('#l-erro', 'E-mail ou senha incorretos.');
+  $('#l-senha').value = '';
+  entrarNoApp();
+});
+$('#btn-sair').addEventListener('click', () => sb.auth.signOut());
+
+/* ============ NAVEGAÇÃO ============ */
+const TITULOS = { home: 'Início', viagens: 'Viagens', cadastros: 'Cadastros' };
+function trocarAba(tab) {
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  ['home','viagens','cadastros'].forEach(t => $('#view-' + t).hidden = t !== tab);
+  $('#titulo').textContent = TITULOS[tab];
+  window.scrollTo(0, 0);
+  ({ home: renderHome, viagens: renderViagens, cadastros: renderCadastros })[tab]();
+}
+document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => trocarAba(b.dataset.tab)));
+
+/* ============ INÍCIO (ALERTAS E RESUMO) ============ */
+const TIPO_DOC = { CNH:'CNH', LICENCIAMENTO:'Licenciamento', IPVA:'IPVA', SEGURO:'Seguro', OUTRO:'Documento' };
+
+function diasTxt(d) {
+  if (d == null) return '';
+  if (d < 0) return `venceu há ${-d} dia${-d === 1 ? '' : 's'}`;
+  if (d === 0) return 'vence hoje';
+  return `vence em ${d} dia${d === 1 ? '' : 's'}`;
+}
+
+async function renderHome() {
+  const el = $('#view-home');
+  el.innerHTML = '<p class="muted" style="padding:12px 4px">Carregando…</p>';
+  const [dash, venc, manut, anor] = await Promise.all([
+    sb.from('vw_dashboard_mensal').select('*').order('mes', {ascending:false}).limit(1),
+    sb.from('vw_vencimentos_alerta').select('*').neq('situacao', 'OK').order('vencimento'),
+    sb.from('vw_manutencao_alerta').select('*').neq('situacao', 'OK'),
+    sb.from('vw_consumo_anormal').select('*').order('data_viagem', {ascending:false}).limit(5)
+  ]);
+  const erro = [dash, venc, manut, anor].find(r => r.error);
+  if (erro) { el.innerHTML = `<div class="msg err">Erro ao carregar: ${esc(traduzErro(erro.error))}</div>`; return; }
+
+  let html = '';
+
+  // Resumo do mês
+  const d = dash.data[0];
+  if (d) {
+    const cpk = d.km_total > 0 ? d.custo_total / d.km_total : null;
+    let variacao = '';
+    if (d.variacao_pct != null) {
+      const cls = d.variacao_pct > 0 ? 'bad' : 'ok';
+      variacao = ` <span class="badge ${cls}">${d.variacao_pct > 0 ? '▲' : '▼'} ${fmt(Math.abs(d.variacao_pct))}% vs mês anterior</span>`;
+    }
+    html += `<div class="card"><div class="muted" style="font-size:14px">${esc(mesBR(d.mes))}${variacao}</div>
+      <div class="stats">
+        <div class="stat"><b>${brl(d.custo_total)}</b><span>Custo total</span></div>
+        <div class="stat"><b>${fmt(d.km_total, 0)} km</b><span>Rodados</span></div>
+        <div class="stat"><b>${cpk == null ? '—' : brl(cpk)}</b><span>Custo por km</span></div>
+        <div class="stat"><b>${brl(d.custo_combustivel)}</b><span>Combustível</span></div>
+      </div></div>`;
+  } else {
+    html += `<div class="card"><b>Bem-vindo!</b><p class="muted" style="margin:6px 0 0">Ainda não há dados. Comece em <b>Cadastros</b> (veículo e motorista) e depois lance a primeira viagem em <b>Viagens</b>.</p></div>`;
+  }
+
+  // Vencimentos
+  html += '<h2>Vencimentos</h2><div class="card">';
+  if (!venc.data.length) html += '<div class="muted">✅ Nenhum vencimento próximo.</div>';
+  venc.data.forEach(v => {
+    html += `<div class="item"><div><div class="t">${esc(TIPO_DOC[v.tipo] || v.tipo)} — ${esc(v.descricao)}</div>
+      <div class="s">${dataBR(v.vencimento)} · ${diasTxt(v.dias_para_vencer)}</div></div>
+      <span class="badge ${v.situacao === 'VENCIDO' ? 'bad' : 'warn'}">${v.situacao === 'VENCIDO' ? 'Vencido' : 'Vencendo'}</span></div>`;
+  });
+  html += '</div>';
+
+  // Manutenção
+  html += '<h2>Manutenção</h2><div class="card">';
+  if (!manut.data.length) html += '<div class="muted">✅ Nenhuma manutenção pendente.</div>';
+  manut.data.forEach(m => {
+    const partes = [];
+    if (m.proximo_km != null) {
+      const falta = m.proximo_km - m.km_atual;
+      partes.push(falta >= 0 ? `faltam ${fmt(falta, 0)} km` : `passou ${fmt(-falta, 0)} km`);
+    }
+    if (m.proxima_data) partes.push(`prazo ${dataBR(m.proxima_data)}`);
+    html += `<div class="item"><div><div class="t">${esc(m.manutencao)} — ${esc(m.placa)}</div>
+      <div class="s">${esc(partes.join(' · '))}</div></div>
+      <span class="badge ${m.situacao === 'VENCIDA' ? 'bad' : 'warn'}">${m.situacao === 'VENCIDA' ? 'Vencida' : 'Próxima'}</span></div>`;
+  });
+  html += '</div>';
+
+  // Consumo anormal
+  html += '<h2>Consumo abaixo do normal</h2><div class="card">';
+  if (!anor.data.length) html += '<div class="muted">✅ Nenhuma viagem fora do padrão.</div>';
+  anor.data.forEach(a => {
+    html += `<div class="item"><div><div class="t">${esc(a.placa)} · ${dataBR(a.data_viagem)}</div>
+      <div class="s">${esc(a.motorista)} · fez ${fmt(a.consumo_medio, 2)} km/l (média do veículo ${fmt(a.media_veiculo, 2)})</div></div>
+      <span class="badge warn">Verificar</span></div>`;
+  });
+  html += '</div>';
+
+  el.innerHTML = html;
+}
+
+/* ============ VIAGENS ============ */
+let cacheVeiculos = [];
+
+async function carregarSelects() {
+  const [v, m] = await Promise.all([
+    sb.from('veiculos').select('id,placa,modelo,km_atual').eq('ativo', true).order('placa'),
+    sb.from('motoristas').select('id,nome').eq('ativo', true).order('nome')
+  ]);
+  cacheVeiculos = v.data || [];
+  $('#v-veiculo').innerHTML = cacheVeiculos.length
+    ? '<option value="">Selecione…</option>' + cacheVeiculos.map(x => `<option value="${x.id}">${esc(x.placa)} — ${esc(x.modelo)}</option>`).join('')
+    : '<option value="">Cadastre um veículo primeiro</option>';
+  const ms = m.data || [];
+  $('#v-motorista').innerHTML = ms.length
+    ? '<option value="">Selecione…</option>' + ms.map(x => `<option value="${x.id}">${esc(x.nome)}</option>`).join('')
+    : '<option value="">Cadastre um motorista primeiro</option>';
+}
+
+function atualizaCalculo() {
+  const kmi = parseNum($('#v-kmi').value), kmf = parseNum($('#v-kmf').value);
+  const l = parseNum($('#v-litros').value), val = parseNum($('#v-valor').value);
+  const el = $('#calc');
+  if (kmi == null || kmf == null || l == null || l <= 0) { el.textContent = 'Preencha KM e litros para ver os cálculos.'; return; }
+  const dist = kmf - kmi;
+  if (dist < 0) { el.innerHTML = '⚠️ O KM final está menor que o KM inicial.'; return; }
+  let txt = `Distância: <b>${fmt(dist)} km</b> · Consumo: <b>${fmt(dist / l, 2)} km/l</b>`;
+  if (val != null) {
+    txt += ` · Preço/litro: <b>${brl(val / l)}</b>`;
+    if (dist > 0) txt += ` · Custo/km: <b>${brl(val / dist)}</b>`;
+  }
+  el.innerHTML = txt;
+}
+['#v-kmi','#v-kmf','#v-litros','#v-valor'].forEach(s => $(s).addEventListener('input', atualizaCalculo));
+$('#v-veiculo').addEventListener('change', () => {
+  const v = cacheVeiculos.find(x => String(x.id) === $('#v-veiculo').value);
+  if (v) $('#v-kmi').value = String(v.km_atual).replace('.', ',');
+  atualizaCalculo();
+});
+
+async function renderViagens() {
+  $('#v-data').value = $('#v-data').value || hoje();
+  carregarSelects();
+  const el = $('#lista-viagens');
+  el.innerHTML = '<p class="muted" style="padding:0 4px">Carregando…</p>';
+  const { data, error } = await sb.from('viagens')
+    .select('id,data_viagem,ponto_inicial,ponto_final,distancia_km,consumo_medio,valor_total,veiculos(placa),motoristas(nome)')
+    .order('data_viagem', {ascending:false}).order('id', {ascending:false}).limit(30);
+  if (error) { el.innerHTML = `<div class="msg err">${esc(traduzErro(error))}</div>`; return; }
+  if (!data.length) { el.innerHTML = '<div class="card muted">Nenhuma viagem lançada ainda.</div>'; return; }
+  el.innerHTML = '<div class="card">' + data.map(t => `
+    <div class="item"><div>
+      <div class="t">${esc(t.veiculos?.placa)} · ${dataBR(t.data_viagem)}</div>
+      <div class="s">${esc(t.ponto_inicial)} → ${esc(t.ponto_final)}</div>
+      <div class="s">${esc(t.motoristas?.nome)}</div></div>
+      <div class="right"><div class="t">${brl(t.valor_total)}</div>
+      <div class="s">${fmt(t.distancia_km)} km · ${fmt(t.consumo_medio, 2)} km/l</div></div></div>`).join('') + '</div>';
+}
+
+$('#f-viagem').addEventListener('submit', async e => {
+  e.preventDefault();
+  showErr('#v-erro', '');
+  const kmi = parseNum($('#v-kmi').value), kmf = parseNum($('#v-kmf').value);
+  const litros = parseNum($('#v-litros').value), valor = parseNum($('#v-valor').value);
+  if (!$('#v-veiculo').value || !$('#v-motorista').value) return showErr('#v-erro', 'Selecione o veículo e o motorista.');
+  if ([kmi, kmf, litros, valor].some(x => x == null)) return showErr('#v-erro', 'Confira KM, litros e valor: algum número está inválido.');
+  if (kmf < kmi) return showErr('#v-erro', 'O KM final não pode ser menor que o KM inicial.');
+  if (litros <= 0) return showErr('#v-erro', 'Os litros precisam ser maiores que zero.');
+
+  const btn = e.submitter; btn.disabled = true;
+  const { error } = await sb.from('viagens').insert({
+    veiculo_id: +$('#v-veiculo').value, motorista_id: +$('#v-motorista').value,
+    data_viagem: $('#v-data').value, ponto_inicial: $('#v-de').value.trim(), ponto_final: $('#v-ate').value.trim(),
+    km_inicial: kmi, km_final: kmf, combustivel: $('#v-comb').value, litros, valor_total: valor
+  });
+  btn.disabled = false;
+  if (error) return showErr('#v-erro', traduzErro(error));
+  e.target.reset();
+  $('#v-data').value = hoje();
+  $('#calc').textContent = 'Preencha KM e litros para ver os cálculos.';
+  $('#nova-viagem').open = false;
+  toast('Viagem salva ✔');
+  renderViagens();
+});
+
+/* ============ CADASTROS ============ */
+async function renderCadastros() {
+  const [v, m] = await Promise.all([
+    sb.from('veiculos').select('*').order('placa'),
+    sb.from('motoristas').select('*').order('nome')
+  ]);
+  const lv = $('#lista-veiculos'), lm = $('#lista-motoristas');
+
+  lv.innerHTML = v.error ? `<div class="msg err">${esc(traduzErro(v.error))}</div>`
+    : !v.data.length ? '<div class="card muted">Nenhum veículo cadastrado.</div>'
+    : '<div class="card">' + v.data.map(x => `
+      <div class="item"><div><div class="t">${esc(x.placa)} — ${esc(x.modelo)}</div>
+      <div class="s">Ano ${esc(x.ano)} · ${fmt(x.km_atual, 0)} km</div></div>
+      ${x.ativo ? '' : '<span class="badge warn">Inativo</span>'}</div>`).join('') + '</div>';
+
+  lm.innerHTML = m.error ? `<div class="msg err">${esc(traduzErro(m.error))}</div>`
+    : !m.data.length ? '<div class="card muted">Nenhum motorista cadastrado.</div>'
+    : '<div class="card">' + m.data.map(x => {
+        const dias = Math.round((new Date(x.vencimento_cnh + 'T00:00:00') - new Date(hoje() + 'T00:00:00')) / 86400000);
+        const cls = dias < 0 ? 'bad' : dias <= 60 ? 'warn' : 'ok';
+        const rot = dias < 0 ? 'CNH vencida' : dias <= 60 ? 'CNH vencendo' : 'CNH ok';
+        return `<div class="item"><div><div class="t">${esc(x.nome)}</div>
+          <div class="s">Categoria ${esc(x.categoria_cnh)} · vence ${dataBR(x.vencimento_cnh)}</div></div>
+          <span class="badge ${cls}">${rot}</span></div>`;
+      }).join('') + '</div>';
+}
+
+$('#f-veiculo').addEventListener('submit', async e => {
+  e.preventDefault(); showErr('#c-erro', '');
+  const ano = parseInt($('#c-ano').value, 10), km = parseNum($('#c-km').value);
+  const placa = $('#c-placa').value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!ano || ano < 1950 || ano > 2100) return showErr('#c-erro', 'Informe um ano válido (ex.: 2020).');
+  if (km == null || km < 0) return showErr('#c-erro', 'Informe o KM atual do veículo (o número que está no painel).');
+  if (placa.length !== 7) return showErr('#c-erro', 'A placa deve ter 7 caracteres (ex.: ABC1D23).');
+  const btn = e.submitter; btn.disabled = true;
+  const { error } = await sb.from('veiculos').insert({ modelo: $('#c-modelo').value.trim(), ano, placa, km_atual: km });
+  btn.disabled = false;
+  if (error) return showErr('#c-erro', traduzErro(error));
+  e.target.reset(); e.target.closest('details').open = false;
+  toast('Veículo salvo ✔'); renderCadastros();
+});
+
+$('#f-motorista').addEventListener('submit', async e => {
+  e.preventDefault(); showErr('#m-erro', '');
+  const btn = e.submitter; btn.disabled = true;
+  const { error } = await sb.from('motoristas').insert({
+    nome: $('#m-nome').value.trim(), categoria_cnh: $('#m-cat').value, vencimento_cnh: $('#m-venc').value
+  });
+  btn.disabled = false;
+  if (error) return showErr('#m-erro', traduzErro(error));
+  e.target.reset(); e.target.closest('details').open = false;
+  toast('Motorista salvo ✔'); renderCadastros();
+});
+
+init();
+</script>
+</body>
+</html>
