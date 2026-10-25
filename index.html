@@ -114,10 +114,11 @@ nav button.on{color:var(--brand);font-weight:700}
           <div class="field"><label for="v-veiculo">Veículo</label><select id="v-veiculo" required></select></div>
           <div class="field"><label for="v-motorista">Motorista</label><select id="v-motorista" required></select></div>
           <div class="field"><label for="v-data">Data</label><input id="v-data" type="date" required></div>
-          <div class="row">
-            <div class="field"><label for="v-de">Ponto inicial</label><input id="v-de" type="text" required></div>
-            <div class="field"><label for="v-ate">Ponto final</label><input id="v-ate" type="text" required></div>
-          </div>
+          <div class="field"><label for="v-de">Endereço de saída</label>
+            <input id="v-de" type="text" list="enderecos" placeholder="Rua, número, bairro, cidade" maxlength="200" required></div>
+          <div class="field"><label for="v-ate">Endereço de chegada</label>
+            <input id="v-ate" type="text" list="enderecos" placeholder="Rua, número, bairro, cidade" maxlength="200" required></div>
+          <datalist id="enderecos"></datalist>
           <div class="row">
             <div class="field"><label for="v-kmi">KM inicial</label><input id="v-kmi" type="text" inputmode="decimal" required></div>
             <div class="field"><label for="v-kmf">KM final</label><input id="v-kmf" type="text" inputmode="decimal" required></div>
@@ -350,10 +351,18 @@ async function renderHome() {
 let cacheVeiculos = [];
 
 async function carregarSelects() {
-  const [v, m] = await Promise.all([
+  const [v, m, e] = await Promise.all([
     sb.from('veiculos').select('id,placa,modelo,km_atual').eq('ativo', true).order('placa'),
-    sb.from('motoristas').select('id,nome').eq('ativo', true).order('nome')
+    sb.from('motoristas').select('id,nome').eq('ativo', true).order('nome'),
+    sb.from('viagens').select('ponto_inicial,ponto_final').order('id', {ascending:false}).limit(200)
   ]);
+  // Sugestões de endereço: os já usados (mais recentes primeiro, sem repetir)
+  const vistos = new Set(), sugestoes = [];
+  (e.data || []).forEach(t => [t.ponto_inicial, t.ponto_final].forEach(a => {
+    const chave = String(a || '').trim().toLowerCase();
+    if (chave && !vistos.has(chave) && sugestoes.length < 60) { vistos.add(chave); sugestoes.push(String(a).trim()); }
+  }));
+  $('#enderecos').innerHTML = sugestoes.map(a => `<option value="${esc(a)}"></option>`).join('');
   cacheVeiculos = v.data || [];
   $('#v-veiculo').innerHTML = cacheVeiculos.length
     ? '<option value="">Selecione…</option>' + cacheVeiculos.map(x => `<option value="${x.id}">${esc(x.placa)} — ${esc(x.modelo)}</option>`).join('')
@@ -398,7 +407,8 @@ async function renderViagens() {
   el.innerHTML = '<div class="card">' + data.map(t => `
     <div class="item"><div>
       <div class="t">${esc(t.veiculos?.placa)} · ${dataBR(t.data_viagem)}</div>
-      <div class="s">${esc(t.ponto_inicial)} → ${esc(t.ponto_final)}</div>
+      <div class="s">Saída: ${esc(t.ponto_inicial)}</div>
+      <div class="s">Chegada: ${esc(t.ponto_final)}</div>
       <div class="s">${esc(t.motoristas?.nome)}</div></div>
       <div class="right"><div class="t">${brl(t.valor_total)}</div>
       <div class="s">${fmt(t.distancia_km)} km · ${fmt(t.consumo_medio, 2)} km/l</div></div></div>`).join('') + '</div>';
@@ -417,7 +427,7 @@ $('#f-viagem').addEventListener('submit', async e => {
   const btn = e.submitter; btn.disabled = true;
   const { error } = await sb.from('viagens').insert({
     veiculo_id: +$('#v-veiculo').value, motorista_id: +$('#v-motorista').value,
-    data_viagem: $('#v-data').value, ponto_inicial: $('#v-de').value.trim(), ponto_final: $('#v-ate').value.trim(),
+    data_viagem: $('#v-data').value, ponto_inicial: $('#v-de').value.trim().replace(/\s+/g, ' '), ponto_final: $('#v-ate').value.trim().replace(/\s+/g, ' '),
     km_inicial: kmi, km_final: kmf, combustivel: $('#v-comb').value, litros, valor_total: valor
   });
   btn.disabled = false;
