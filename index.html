@@ -68,6 +68,10 @@ nav button .ic{font-size:22px;line-height:1}
 nav button.on{color:var(--brand);font-weight:700}
 #login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
 #login .card{width:100%;max-width:380px;padding:22px}
+.pw{position:relative}
+.pw input{padding-right:92px}
+.pw button{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:0;color:var(--brand);
+  font:inherit;font-size:14px;font-weight:700;padding:10px 12px;min-height:40px}
 .toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--ink);color:var(--bg);
   padding:10px 16px;border-radius:12px;font-size:14px;z-index:20;max-width:90%}
 </style>
@@ -83,7 +87,10 @@ nav button.on{color:var(--brand);font-weight:700}
       <div class="field"><label for="l-email">E-mail</label>
         <input id="l-email" type="email" autocomplete="username" autocapitalize="none" required></div>
       <div class="field"><label for="l-senha">Senha</label>
-        <input id="l-senha" type="password" autocomplete="current-password" required></div>
+        <div class="pw">
+          <input id="l-senha" type="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" required>
+          <button id="btn-ver-senha" type="button" aria-label="Mostrar ou ocultar a senha">Mostrar</button>
+        </div></div>
       <div id="l-erro" class="msg err" hidden></div>
       <button class="primary" type="submit">Entrar</button>
     </form>
@@ -239,6 +246,11 @@ $('#f-login').addEventListener('submit', async e => {
   entrarNoApp();
 });
 $('#btn-sair').addEventListener('click', () => sb.auth.signOut());
+$('#btn-ver-senha').addEventListener('click', () => {
+  const campo = $('#l-senha'), mostrar = campo.type === 'password';
+  campo.type = mostrar ? 'text' : 'password';
+  $('#btn-ver-senha').textContent = mostrar ? 'Ocultar' : 'Mostrar';
+});
 
 /* ============ NAVEGAÇÃO ============ */
 const TITULOS = { home: 'Início', viagens: 'Viagens', cadastros: 'Cadastros' };
