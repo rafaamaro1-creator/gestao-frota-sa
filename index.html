@@ -130,15 +130,45 @@ nav button.on{color:var(--brand);font-weight:700}
             </select></div>
           <div class="row">
             <div class="field"><label for="v-litros">Litros</label><input id="v-litros" type="text" inputmode="decimal" required></div>
-            <div class="field"><label for="v-valor">Valor total (R$)</label><input id="v-valor" type="text" inputmode="decimal" required></div>
+            <div class="field"><label for="v-preco">Preço do litro (R$)</label><input id="v-preco" type="text" inputmode="decimal" placeholder="ex.: 6,89"></div>
           </div>
+          <div class="field"><label for="v-valor">Valor total (R$)</label>
+            <input id="v-valor" type="text" inputmode="decimal" required>
+            <div class="muted" style="font-size:13px;margin-top:4px">Calculado por litros × preço. Se o valor da bomba for diferente, corrija aqui.</div></div>
           <div id="calc" class="calc">Preencha KM e litros para ver os cálculos.</div>
           <div id="v-erro" class="msg err" hidden></div>
           <button class="primary" type="submit">Salvar viagem</button>
         </form>
       </details>
+
+      <details id="novo-abast" class="card">
+        <summary>＋ Abastecimento sem viagem</summary>
+        <p class="muted" style="margin:0 0 12px;font-size:14px">Use para abastecimentos que não fecham uma viagem, como o primeiro abastecimento antes de começar a usar o app. O valor entra no custo do mês, mas não entra no cálculo de consumo (km/l).</p>
+        <form id="f-abast" autocomplete="off">
+          <div class="field"><label for="a-veiculo">Veículo</label><select id="a-veiculo" required></select></div>
+          <div class="field"><label for="a-data">Data</label><input id="a-data" type="date" required></div>
+          <div class="field"><label for="a-km">KM no odômetro</label><input id="a-km" type="text" inputmode="decimal" required></div>
+          <div class="field"><label for="a-comb">Combustível</label>
+            <select id="a-comb">
+              <option value="gasolina">Gasolina</option><option value="etanol">Etanol</option>
+              <option value="diesel">Diesel</option><option value="gnv">GNV</option><option value="flex_outro">Outro</option>
+            </select></div>
+          <div class="row">
+            <div class="field"><label for="a-litros">Litros</label><input id="a-litros" type="text" inputmode="decimal" required></div>
+            <div class="field"><label for="a-preco">Preço do litro (R$)</label><input id="a-preco" type="text" inputmode="decimal" placeholder="ex.: 6,89"></div>
+          </div>
+          <div class="field"><label for="a-valor">Valor total (R$)</label>
+            <input id="a-valor" type="text" inputmode="decimal" required>
+            <div class="muted" style="font-size:13px;margin-top:4px">Calculado por litros × preço. Se o valor da bomba for diferente, corrija aqui.</div></div>
+          <div id="a-erro" class="msg err" hidden></div>
+          <button class="primary" type="submit">Salvar abastecimento</button>
+        </form>
+      </details>
+
       <h2>Últimas viagens</h2>
       <div id="lista-viagens"></div>
+      <h2 id="h-abast">Abastecimentos sem viagem</h2>
+      <div id="lista-abast"></div>
     </section>
 
     <section id="view-cadastros" hidden>
@@ -208,6 +238,27 @@ function parseNum(v) {
   else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
   const n = parseFloat(s);
   return isNaN(n) ? null : n;
+}
+
+// Liga litros, preço do litro e valor total.
+// Digitou o preço (ou os litros): o total é calculado. Corrigiu o total: o preço é recalculado.
+const numTxt = (n, d) => Number(n.toFixed(d)).toString().replace('.', ',');
+function ligarPreco(lId, pId, vId, aoMudar) {
+  const L = $(lId), P = $(pId), V = $(vId);
+  let base = 'preco';
+  const calcTotal = () => {
+    const l = parseNum(L.value), p = parseNum(P.value);
+    if (l > 0 && p != null && p >= 0) V.value = (Math.round(l * p * 100) / 100).toFixed(2).replace('.', ',');
+  };
+  const calcPreco = () => {
+    const l = parseNum(L.value), v = parseNum(V.value);
+    if (l > 0 && v != null && v >= 0) P.value = numTxt(v / l, 3);
+  };
+  const avisa = () => { if (aoMudar) aoMudar(); };
+  P.addEventListener('input', () => { base = 'preco'; calcTotal(); avisa(); });
+  V.addEventListener('input', () => { base = 'total'; calcPreco(); avisa(); });
+  L.addEventListener('input', () => { base === 'total' ? calcPreco() : calcTotal(); avisa(); });
+  L.form.addEventListener('reset', () => { base = 'preco'; });
 }
 
 function toast(msg) {
@@ -291,7 +342,8 @@ async function renderHome() {
   // Resumo do mês
   const d = dash.data[0];
   if (d) {
-    const cpk = d.km_total > 0 ? d.custo_total / d.km_total : null;
+    // Custo por km não conta abastecimentos sem viagem (eles não têm km associado)
+    const cpk = d.km_total > 0 ? (d.custo_total - (d.custo_abast_avulso || 0)) / d.km_total : null;
     let variacao = '';
     if (d.variacao_pct != null) {
       const cls = d.variacao_pct > 0 ? 'bad' : 'ok';
@@ -367,6 +419,7 @@ async function carregarSelects() {
   $('#v-veiculo').innerHTML = cacheVeiculos.length
     ? '<option value="">Selecione…</option>' + cacheVeiculos.map(x => `<option value="${x.id}">${esc(x.placa)} — ${esc(x.modelo)}</option>`).join('')
     : '<option value="">Cadastre um veículo primeiro</option>';
+  $('#a-veiculo').innerHTML = $('#v-veiculo').innerHTML;
   const ms = m.data || [];
   $('#v-motorista').innerHTML = ms.length
     ? '<option value="">Selecione…</option>' + ms.map(x => `<option value="${x.id}">${esc(x.nome)}</option>`).join('')
@@ -388,19 +441,73 @@ function atualizaCalculo() {
   el.innerHTML = txt;
 }
 ['#v-kmi','#v-kmf','#v-litros','#v-valor'].forEach(s => $(s).addEventListener('input', atualizaCalculo));
+ligarPreco('#v-litros', '#v-preco', '#v-valor', atualizaCalculo);
 $('#v-veiculo').addEventListener('change', () => {
   const v = cacheVeiculos.find(x => String(x.id) === $('#v-veiculo').value);
   if (v) $('#v-kmi').value = String(v.km_atual).replace('.', ',');
   atualizaCalculo();
 });
 
+/* ---- Abastecimento sem viagem (conta no custo, não entra no km/l) ---- */
+$('#a-veiculo').addEventListener('change', () => {
+  const v = cacheVeiculos.find(x => String(x.id) === $('#a-veiculo').value);
+  if (v) $('#a-km').value = String(v.km_atual).replace('.', ',');
+});
+
+ligarPreco('#a-litros', '#a-preco', '#a-valor');
+
+async function renderAbast() {
+  const el = $('#lista-abast');
+  const { data, error } = await sb.from('abastecimentos_avulsos')
+    .select('id,data_abastecimento,km,litros,valor_total,combustivel,veiculos(placa)')
+    .order('data_abastecimento', {ascending:false}).order('id', {ascending:false}).limit(10);
+  if (error) {
+    // Tabela ainda não criada no banco (SQL de abastecimento sem viagem não rodou): esconde a seção
+    if (/abastecimentos_avulsos|schema cache/i.test(error.message || '') || error.code === '42P01' || error.code === 'PGRST205') {
+      $('#novo-abast').hidden = true; $('#h-abast').hidden = true; el.innerHTML = ''; return;
+    }
+    el.innerHTML = `<div class="msg err">${esc(traduzErro(error))}</div>`; return;
+  }
+  $('#novo-abast').hidden = false; $('#h-abast').hidden = false;
+  if (!data.length) { el.innerHTML = '<div class="card muted">Nenhum abastecimento sem viagem.</div>'; return; }
+  el.innerHTML = '<div class="card">' + data.map(a => `
+    <div class="item"><div>
+      <div class="t">${esc(a.veiculos?.placa)} · ${dataBR(a.data_abastecimento)}</div>
+      <div class="s">${fmt(a.km, 0)} km · ${fmt(a.litros, 2)} L · ${esc(a.combustivel)}</div></div>
+      <div class="right"><div class="t">${brl(a.valor_total)}</div></div></div>`).join('') + '</div>';
+}
+
+$('#f-abast').addEventListener('submit', async e => {
+  e.preventDefault(); showErr('#a-erro', '');
+  const km = parseNum($('#a-km').value), litros = parseNum($('#a-litros').value), valor = parseNum($('#a-valor').value);
+  const v = cacheVeiculos.find(x => String(x.id) === $('#a-veiculo').value);
+  if (!v) return showErr('#a-erro', 'Selecione o veículo.');
+  if ([km, litros, valor].some(x => x == null)) return showErr('#a-erro', 'Confira KM, litros e valor: algum número está inválido.');
+  if (litros <= 0) return showErr('#a-erro', 'Os litros precisam ser maiores que zero.');
+  if (km < v.km_atual) return showErr('#a-erro', `O KM informado é menor que o KM atual do veículo (${fmt(v.km_atual, 0)}).`);
+  const btn = e.submitter; btn.disabled = true;
+  const { error } = await sb.from('abastecimentos_avulsos').insert({
+    veiculo_id: v.id, data_abastecimento: $('#a-data').value, km,
+    combustivel: $('#a-comb').value, litros, valor_total: valor
+  });
+  btn.disabled = false;
+  if (error) return showErr('#a-erro', traduzErro(error));
+  e.target.reset();
+  $('#a-data').value = hoje();
+  $('#novo-abast').open = false;
+  toast('Abastecimento salvo ✔');
+  renderViagens();
+});
+
 async function renderViagens() {
   $('#v-data').value = $('#v-data').value || hoje();
+  $('#a-data').value = $('#a-data').value || hoje();
   carregarSelects();
+  renderAbast();
   const el = $('#lista-viagens');
   el.innerHTML = '<p class="muted" style="padding:0 4px">Carregando…</p>';
   const { data, error } = await sb.from('viagens')
-    .select('id,data_viagem,ponto_inicial,ponto_final,distancia_km,consumo_medio,valor_total,veiculos(placa),motoristas(nome)')
+    .select('id,data_viagem,ponto_inicial,ponto_final,distancia_km,consumo_medio,litros,preco_litro,valor_total,veiculos(placa),motoristas(nome)')
     .order('data_viagem', {ascending:false}).order('id', {ascending:false}).limit(30);
   if (error) { el.innerHTML = `<div class="msg err">${esc(traduzErro(error))}</div>`; return; }
   if (!data.length) { el.innerHTML = '<div class="card muted">Nenhuma viagem lançada ainda.</div>'; return; }
@@ -411,7 +518,8 @@ async function renderViagens() {
       <div class="s">Chegada: ${esc(t.ponto_final)}</div>
       <div class="s">${esc(t.motoristas?.nome)}</div></div>
       <div class="right"><div class="t">${brl(t.valor_total)}</div>
-      <div class="s">${fmt(t.distancia_km)} km · ${fmt(t.consumo_medio, 2)} km/l</div></div></div>`).join('') + '</div>';
+      <div class="s">${fmt(t.distancia_km)} km · ${fmt(t.consumo_medio, 2)} km/l</div>
+      <div class="s">${fmt(t.litros, 1)} L · ${brl(t.preco_litro)}/L</div></div></div>`).join('') + '</div>';
 }
 
 $('#f-viagem').addEventListener('submit', async e => {
