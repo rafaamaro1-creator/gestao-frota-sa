@@ -68,6 +68,9 @@ nav button .ic{font-size:22px;line-height:1}
 nav button.on{color:var(--brand);font-weight:700}
 #login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
 #login .card{width:100%;max-width:380px;padding:22px}
+button.mini{background:none;border:1px solid var(--line);color:var(--brand);border-radius:10px;padding:6px 12px;font:inherit;font-size:14px;font-weight:600;min-height:36px}
+button.mini.bad{color:var(--bad)}
+.acoes{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
 .pw{position:relative}
 .pw input{padding-right:92px}
 .pw button{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:0;color:var(--brand);
@@ -205,11 +208,75 @@ nav button.on{color:var(--brand);font-weight:700}
       <h2>Motoristas</h2>
       <div id="lista-motoristas"></div>
     </section>
+
+    <section id="view-manut" hidden>
+      <h2 style="margin-top:14px">Situação</h2>
+      <div id="manut-status"></div>
+
+      <h2>Gastos com manutenção</h2>
+      <div id="manut-custos"></div>
+
+      <details id="nova-manut" class="card">
+        <summary>＋ Registrar manutenção (preventiva ou corretiva)</summary>
+        <form id="f-manut" autocomplete="off">
+          <div class="field"><label for="mt-tipo">Tipo</label>
+            <select id="mt-tipo">
+              <option value="preventiva">Preventiva (revisão programada)</option>
+              <option value="corretiva">Corretiva (conserto de defeito)</option>
+            </select></div>
+          <div class="field"><label for="mt-veiculo">Veículo</label><select id="mt-veiculo" required></select></div>
+          <div class="field"><label for="mt-plano" id="mt-plano-rot">Serviço</label><select id="mt-plano"></select></div>
+          <div class="field"><label for="mt-desc">Descrição <span class="muted" id="mt-desc-dica">(obrigatória)</span></label>
+            <input id="mt-desc" type="text" maxlength="200" placeholder="ex.: óleo 5W30 + filtro"></div>
+          <div class="row">
+            <div class="field"><label for="mt-data">Data</label><input id="mt-data" type="date" required></div>
+            <div class="field"><label for="mt-km">KM no odômetro</label><input id="mt-km" type="text" inputmode="decimal" required></div>
+          </div>
+          <div class="row">
+            <div class="field"><label for="mt-custo">Custo (R$)</label><input id="mt-custo" type="text" inputmode="decimal" required></div>
+            <div class="field"><label for="mt-oficina">Oficina</label><input id="mt-oficina" type="text" maxlength="100"></div>
+          </div>
+          <div id="mt-erro" class="msg err" hidden></div>
+          <button class="primary" type="submit">Salvar manutenção</button>
+        </form>
+      </details>
+
+      <details id="novo-plano" class="card">
+        <summary id="plano-titulo">＋ Novo plano de manutenção</summary>
+        <form id="f-plano" autocomplete="off">
+          <input type="hidden" id="pm-id">
+          <div class="field"><label for="pm-veiculo">Veículo</label><select id="pm-veiculo" required></select></div>
+          <div class="field"><label for="pm-nome">Nome do serviço</label>
+            <input id="pm-nome" type="text" maxlength="100" placeholder="ex.: Correia dentada" required></div>
+          <div class="row">
+            <div class="field"><label for="pm-km">A cada (KM)</label><input id="pm-km" type="text" inputmode="numeric" placeholder="ex.: 60000"></div>
+            <div class="field"><label for="pm-dias">A cada (dias)</label><input id="pm-dias" type="text" inputmode="numeric" placeholder="ex.: 365"></div>
+          </div>
+          <p class="muted" style="margin:-4px 0 12px;font-size:13px">Preencha KM, dias ou os dois. O alerta vale para o que vencer primeiro.</p>
+          <div id="pm-ultima">
+            <div class="row">
+              <div class="field"><label for="pm-ultkm">KM da última vez</label><input id="pm-ultkm" type="text" inputmode="decimal"></div>
+              <div class="field"><label for="pm-ultdata">Data da última vez</label><input id="pm-ultdata" type="date"></div>
+            </div>
+            <p class="muted" style="margin:-4px 0 12px;font-size:13px">Se não sabe quando foi feito, deixe como está: a contagem começa agora.</p>
+          </div>
+          <div id="pm-erro" class="msg err" hidden></div>
+          <button class="primary" type="submit" id="pm-salvar">Salvar plano</button>
+          <button type="button" id="pm-cancelar" class="mini" style="width:100%;margin-top:10px" hidden>Cancelar edição</button>
+        </form>
+      </details>
+
+      <h2>Planos por veículo</h2>
+      <div id="lista-planos"></div>
+      <h2>Histórico</h2>
+      <div id="lista-manut"></div>
+    </section>
   </main>
 
   <nav>
     <button data-tab="home" class="on"><span class="ic">🏠</span>Início</button>
     <button data-tab="viagens"><span class="ic">⛽</span>Viagens</button>
+    <button data-tab="manut"><span class="ic">🔧</span>Manutenção</button>
     <button data-tab="cadastros"><span class="ic">🗂️</span>Cadastros</button>
   </nav>
 </div>
@@ -270,8 +337,11 @@ function toast(msg) {
 function showErr(id, msg) { const e = $(id); e.textContent = msg; e.hidden = !msg; }
 function traduzErro(e) {
   const m = (e && e.message) || String(e);
-  if (/veiculos_placa_key|duplicate key/i.test(m)) return 'Esta placa já está cadastrada.';
+  if (/planos_manutencao/.test(m) && /duplicate key/i.test(m)) return 'Já existe um plano com esse nome para este veículo (confira também os desativados).';
+  if (/veiculos_placa_key/i.test(m)) return 'Esta placa já está cadastrada.';
+  if (/duplicate key/i.test(m)) return 'Este registro já existe.';
   if (/ck_km_final_maior/.test(m)) return 'O KM final não pode ser menor que o KM inicial.';
+  if (/'tipo' column|column.*\btipo\b/i.test(m)) return 'Falta atualizar o banco: rode o arquivo manutencao_corretiva.sql no SQL Editor do Supabase e tente de novo.';
   if (/row-level security|permission denied/i.test(m)) return 'Sem permissão. Saia e entre novamente.';
   if (/Failed to fetch|NetworkError/i.test(m)) return 'Sem conexão com a internet.';
   return m;
@@ -305,13 +375,13 @@ $('#btn-ver-senha').addEventListener('click', () => {
 });
 
 /* ============ NAVEGAÇÃO ============ */
-const TITULOS = { home: 'Início', viagens: 'Viagens', cadastros: 'Cadastros' };
+const TITULOS = { home: 'Início', viagens: 'Viagens', manut: 'Manutenção', cadastros: 'Cadastros' };
 function trocarAba(tab) {
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
-  ['home','viagens','cadastros'].forEach(t => $('#view-' + t).hidden = t !== tab);
+  ['home','viagens','manut','cadastros'].forEach(t => $('#view-' + t).hidden = t !== tab);
   $('#titulo').textContent = TITULOS[tab];
   window.scrollTo(0, 0);
-  ({ home: renderHome, viagens: renderViagens, cadastros: renderCadastros })[tab]();
+  ({ home: renderHome, viagens: renderViagens, manut: renderManut, cadastros: renderCadastros })[tab]();
 }
 document.querySelectorAll('nav button').forEach(b => b.addEventListener('click', () => trocarAba(b.dataset.tab)));
 
@@ -600,6 +670,297 @@ $('#f-motorista').addEventListener('submit', async e => {
   if (error) return showErr('#m-erro', traduzErro(error));
   e.target.reset(); e.target.closest('details').open = false;
   toast('Motorista salvo ✔'); renderCadastros();
+});
+
+/* ============ MANUTENÇÃO ============ */
+// "Marco inicial" = registro de partida (custo zero) que evita alerta falso em plano novo.
+// Ele é removido automaticamente quando você registra a manutenção real daquele serviço.
+const BASE = 'Marco inicial';
+const ORDEM_SIT = { VENCIDA: 0, PROXIMA: 1, OK: 2 };
+const ROTULO_SIT = { VENCIDA: ['bad', 'Vencida'], PROXIMA: ['warn', 'Próxima'], OK: ['ok', 'Em dia'] };
+let mtVeiculos = [], mtPlanos = [];
+
+const diasAte = d => Math.round((new Date(d + 'T00:00:00') - new Date(hoje() + 'T00:00:00')) / 86400000);
+
+function opcoesVeiculos(sel) {
+  const atual = sel.value;
+  sel.innerHTML = mtVeiculos.length
+    ? '<option value="">Selecione…</option>' + mtVeiculos.map(x => `<option value="${x.id}">${esc(x.placa)} — ${esc(x.modelo)}</option>`).join('')
+    : '<option value="">Cadastre um veículo primeiro</option>';
+  if (atual) sel.value = atual;
+}
+
+function dicaDesc() {
+  const corretiva = $('#mt-tipo').value === 'corretiva';
+  $('#mt-desc-dica').textContent = (corretiva || !$('#mt-plano').value) ? '(obrigatória)' : '(opcional)';
+  $('#mt-plano-rot').textContent = corretiva ? 'Plano que este conserto também renova (opcional)' : 'Serviço';
+  $('#mt-desc').placeholder = corretiva ? "ex.: troca da bomba d'água (motor esquentando)" : 'ex.: óleo 5W30 + filtro';
+}
+
+function opcoesPlanos() {
+  const vid = +$('#mt-veiculo').value;
+  const ativos = mtPlanos.filter(p => p.veiculo_id === vid && p.ativo);
+  const atual = $('#mt-plano').value;
+  const corretiva = $('#mt-tipo').value === 'corretiva';
+  $('#mt-plano').innerHTML = `<option value="">${corretiva ? 'Nenhum (só o conserto)' : 'Outro serviço (sem plano)'}</option>` +
+    ativos.map(p => `<option value="${p.id}">${esc(p.nome)}</option>`).join('');
+  if (atual && ativos.some(p => String(p.id) === atual)) $('#mt-plano').value = atual;
+  dicaDesc();
+}
+
+function aoTrocarVeiculoManut() {
+  const v = mtVeiculos.find(x => String(x.id) === $('#mt-veiculo').value);
+  $('#mt-km').value = v ? String(v.km_atual).replace('.', ',') : '';
+  opcoesPlanos();
+}
+$('#mt-veiculo').addEventListener('change', aoTrocarVeiculoManut);
+$('#mt-plano').addEventListener('change', dicaDesc);
+$('#mt-tipo').addEventListener('change', opcoesPlanos);
+$('#pm-veiculo').addEventListener('change', () => {
+  if ($('#pm-id').value) return;
+  const v = mtVeiculos.find(x => String(x.id) === $('#pm-veiculo').value);
+  $('#pm-ultkm').value = v ? String(v.km_atual).replace('.', ',') : '';
+});
+
+function abrirRegistro(veiculoId, planoId) {
+  $('#nova-manut').open = true;
+  $('#mt-tipo').value = 'preventiva';
+  $('#mt-veiculo').value = String(veiculoId);
+  aoTrocarVeiculoManut();
+  if (planoId) $('#mt-plano').value = String(planoId);
+  dicaDesc();
+  $('#nova-manut').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function renderManut() {
+  $('#mt-data').value = $('#mt-data').value || hoje();
+  $('#pm-ultdata').value = $('#pm-ultdata').value || hoje();
+  const d12 = new Date(); d12.setDate(d12.getDate() - 365);
+  const inicio12 = d12.toLocaleDateString('en-CA');
+  const [v, p, st, h, c] = await Promise.all([
+    sb.from('veiculos').select('id,placa,modelo,km_atual').eq('ativo', true).order('placa'),
+    sb.from('planos_manutencao').select('*').order('nome'),
+    sb.from('vw_manutencao_alerta').select('*'),
+    sb.from('manutencoes').select('*, veiculos(placa)')
+      .order('data_manutencao', {ascending:false}).order('id', {ascending:false}).limit(20),
+    sb.from('manutencoes').select('*').gte('data_manutencao', inicio12)
+  ]);
+  const erro = [v, p, st, h, c].find(r => r.error);
+  if (erro) { $('#manut-status').innerHTML = `<div class="msg err">${esc(traduzErro(erro.error))}</div>`; return; }
+  mtVeiculos = v.data || []; mtPlanos = p.data || [];
+  opcoesVeiculos($('#mt-veiculo')); opcoesVeiculos($('#pm-veiculo')); opcoesPlanos();
+  renderStatusManut(st.data || []); renderCustosManut(c.data || []); renderPlanos(); renderHistorico(h.data || []);
+}
+
+// Quanto foi gasto com manutenção preventiva x corretiva (mês atual e últimos 12 meses)
+function renderCustosManut(rows) {
+  const mes = hoje().slice(0, 7);
+  const soma = (fn) => rows.filter(fn).reduce((s, m) => s + Number(m.custo || 0), 0);
+  const corr = m => m.tipo === 'corretiva';
+  const doMes = m => String(m.data_manutencao).slice(0, 7) === mes;
+  $('#manut-custos').innerHTML = `<div class="card">
+    <div class="muted" style="font-size:14px">Este mês</div>
+    <div class="stats">
+      <div class="stat"><b>${brl(soma(m => doMes(m) && !corr(m)))}</b><span>Preventiva</span></div>
+      <div class="stat"><b>${brl(soma(m => doMes(m) && corr(m)))}</b><span>Corretiva</span></div>
+    </div>
+    <div class="muted" style="font-size:14px;margin-top:14px">Últimos 12 meses</div>
+    <div class="stats">
+      <div class="stat"><b>${brl(soma(m => !corr(m)))}</b><span>Preventiva</span></div>
+      <div class="stat"><b>${brl(soma(corr))}</b><span>Corretiva</span></div>
+    </div></div>`;
+}
+
+function renderStatusManut(rows) {
+  const el = $('#manut-status');
+  if (!rows.length) {
+    el.innerHTML = '<div class="card muted">Nenhum plano ativo. Cadastre um veículo (os planos padrão são criados sozinhos) ou crie um plano abaixo.</div>';
+    return;
+  }
+  rows.sort((a, b) => (ORDEM_SIT[a.situacao] - ORDEM_SIT[b.situacao]) ||
+    String(a.placa).localeCompare(String(b.placa)) || String(a.manutencao).localeCompare(String(b.manutencao)));
+  el.innerHTML = '<div class="card">' + rows.map(m => {
+    const [cls, rot] = ROTULO_SIT[m.situacao] || ['ok', m.situacao];
+    const ult = m.ultima_data
+      ? `Última: ${dataBR(m.ultima_data)}${m.ultimo_km != null ? ' · ' + fmt(m.ultimo_km, 0) + ' km' : ''}`
+      : 'Sem registro anterior: registre quando foi feita pela última vez.';
+    const prox = [];
+    if (m.proximo_km != null) {
+      const f = m.proximo_km - m.km_atual;
+      prox.push(`${fmt(m.proximo_km, 0)} km (${f >= 0 ? 'faltam ' + fmt(f, 0) : 'passou ' + fmt(-f, 0)} km)`);
+    }
+    if (m.proxima_data) prox.push(`${dataBR(m.proxima_data)} (${diasTxt(diasAte(m.proxima_data))})`);
+    return `<div class="item"><div>
+        <div class="t">${esc(m.manutencao)} — ${esc(m.placa)}</div>
+        <div class="s">${esc(ult)}</div>
+        <div class="s">Próxima: ${esc(prox.join(' ou '))}</div>
+        <div class="acoes"><button type="button" class="mini" data-acao="registrar" data-veic="${m.veiculo_id}" data-plano="${m.plano_id}">Registrar feita</button></div>
+      </div><span class="badge ${cls}">${rot}</span></div>`;
+  }).join('') + '</div>';
+}
+
+function renderPlanos() {
+  const el = $('#lista-planos');
+  const blocos = mtVeiculos.map(v => {
+    const ps = mtPlanos.filter(p => p.veiculo_id === v.id);
+    if (!ps.length) return '';
+    return `<div class="card"><div class="t">${esc(v.placa)} — ${esc(v.modelo)}</div>` + ps.map(p => {
+      const iv = [p.intervalo_km ? `${fmt(p.intervalo_km, 0)} km` : null, p.intervalo_dias ? `${p.intervalo_dias} dias` : null].filter(Boolean).join(' ou ');
+      return `<div class="item"><div>
+          <div class="t" style="${p.ativo ? '' : 'opacity:.55'}">${esc(p.nome)}</div>
+          <div class="s">A cada ${esc(iv)}${p.ativo ? '' : ' · desativado'}</div>
+          <div class="acoes">
+            <button type="button" class="mini" data-acao="editar-plano" data-id="${p.id}">Editar</button>
+            <button type="button" class="mini ${p.ativo ? 'bad' : ''}" data-acao="toggle-plano" data-id="${p.id}" data-ativo="${p.ativo}">${p.ativo ? 'Desativar' : 'Reativar'}</button>
+          </div></div></div>`;
+    }).join('') + '</div>';
+  }).join('');
+  el.innerHTML = blocos || '<div class="card muted">Nenhum plano cadastrado.</div>';
+}
+
+function renderHistorico(rows) {
+  const el = $('#lista-manut');
+  if (!rows.length) { el.innerHTML = '<div class="card muted">Nenhuma manutenção registrada.</div>'; return; }
+  el.innerHTML = '<div class="card">' + rows.map(m => {
+    const base = String(m.descricao || '').startsWith(BASE);
+    return `<div class="item"><div>
+        <div class="t">${esc(m.veiculos?.placa)} · ${dataBR(m.data_manutencao)}</div>
+        <div class="s">${esc(m.descricao || 'Manutenção')}${m.oficina ? ' · ' + esc(m.oficina) : ''}</div>
+        <div class="s">${fmt(m.km, 0)} km</div>
+        <div class="acoes"><button type="button" class="mini bad" data-acao="excluir-manut" data-id="${m.id}">Excluir</button></div>
+      </div><div class="right"><div class="t">${base ? '—' : brl(m.custo)}</div>${base ? '' :
+        `<span class="badge ${m.tipo === 'corretiva' ? 'warn' : 'ok'}">${m.tipo === 'corretiva' ? 'Corretiva' : 'Preventiva'}</span>`}</div></div>`;
+  }).join('') + '</div>';
+}
+
+/* ---- Registrar manutenção feita ---- */
+$('#f-manut').addEventListener('submit', async e => {
+  e.preventDefault(); showErr('#mt-erro', '');
+  const v = mtVeiculos.find(x => String(x.id) === $('#mt-veiculo').value);
+  const planoId = $('#mt-plano').value ? +$('#mt-plano').value : null;
+  const plano = planoId ? mtPlanos.find(p => p.id === planoId) : null;
+  const km = parseNum($('#mt-km').value), custo = parseNum($('#mt-custo').value);
+  const desc = $('#mt-desc').value.trim().replace(/\s+/g, ' ');
+  const corretiva = $('#mt-tipo').value === 'corretiva';
+  if (!v) return showErr('#mt-erro', 'Selecione o veículo.');
+  if ((corretiva || !plano) && !desc) return showErr('#mt-erro', corretiva ? 'Descreva o defeito ou o conserto realizado.' : 'Descreva o serviço feito.');
+  if (km == null || km < 0 || custo == null || custo < 0) return showErr('#mt-erro', 'Confira KM e custo: algum número está inválido.');
+  if (km > v.km_atual + 5000 &&
+      !confirm(`O KM informado (${fmt(km, 0)}) é bem maior que o KM atual do veículo (${fmt(v.km_atual, 0)}). Confirmar?`)) return;
+  const btn = e.submitter; btn.disabled = true;
+  try {
+    const registro = {
+      veiculo_id: v.id, plano_id: planoId, data_manutencao: $('#mt-data').value, km, custo,
+      descricao: desc || plano.nome, oficina: $('#mt-oficina').value.trim() || null
+    };
+    if (corretiva) registro.tipo = 'corretiva';   // preventiva é o padrão do banco
+    const { error } = await sb.from('manutencoes').insert(registro);
+    if (error) return showErr('#mt-erro', traduzErro(error));
+    // a manutenção real substitui o marco inicial daquele serviço
+    if (planoId) await sb.from('manutencoes').delete().eq('plano_id', planoId).like('descricao', BASE + '%');
+    e.target.reset();
+    $('#mt-data').value = hoje();
+    opcoesPlanos();
+    $('#nova-manut').open = false;
+    toast('Manutenção salva ✔');
+    renderManut();
+  } finally { btn.disabled = false; }
+});
+
+/* ---- Planos: criar, editar, desativar ---- */
+function sairEdicaoPlano() {
+  $('#f-plano').reset();
+  $('#pm-id').value = '';
+  $('#pm-veiculo').disabled = false;
+  $('#pm-ultima').hidden = false;
+  $('#plano-titulo').textContent = '＋ Novo plano de manutenção';
+  $('#pm-salvar').textContent = 'Salvar plano';
+  $('#pm-cancelar').hidden = true;
+  $('#pm-ultdata').value = hoje();
+  showErr('#pm-erro', '');
+}
+$('#pm-cancelar').addEventListener('click', () => { sairEdicaoPlano(); $('#novo-plano').open = false; });
+
+function editarPlano(id) {
+  const p = mtPlanos.find(x => x.id === id);
+  if (!p) return;
+  $('#pm-id').value = p.id;
+  $('#pm-veiculo').value = String(p.veiculo_id);
+  $('#pm-veiculo').disabled = true;
+  $('#pm-nome').value = p.nome;
+  $('#pm-km').value = p.intervalo_km ?? '';
+  $('#pm-dias').value = p.intervalo_dias ?? '';
+  $('#pm-ultima').hidden = true;
+  $('#plano-titulo').textContent = 'Editando plano';
+  $('#pm-salvar').textContent = 'Salvar alterações';
+  $('#pm-cancelar').hidden = false;
+  showErr('#pm-erro', '');
+  $('#novo-plano').open = true;
+  $('#novo-plano').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function lerIntervalo(txt, rotulo) {
+  if (!txt.trim()) return { valor: null };
+  const n = parseNum(txt);
+  if (n == null || n <= 0) return { erro: `Informe um número maior que zero em "${rotulo}" (ou deixe em branco).` };
+  return { valor: Math.round(n) };
+}
+
+$('#f-plano').addEventListener('submit', async e => {
+  e.preventDefault(); showErr('#pm-erro', '');
+  const id = $('#pm-id').value;
+  const nome = $('#pm-nome').value.trim().replace(/\s+/g, ' ');
+  const ik = lerIntervalo($('#pm-km').value, 'A cada (KM)'), id_ = lerIntervalo($('#pm-dias').value, 'A cada (dias)');
+  if (!nome) return showErr('#pm-erro', 'Informe o nome do serviço.');
+  if (ik.erro || id_.erro) return showErr('#pm-erro', ik.erro || id_.erro);
+  if (ik.valor == null && id_.valor == null) return showErr('#pm-erro', 'Informe o intervalo em KM, em dias, ou nos dois.');
+  const btn = e.submitter; btn.disabled = true;
+  try {
+    if (id) {
+      const { error } = await sb.from('planos_manutencao')
+        .update({ nome, intervalo_km: ik.valor, intervalo_dias: id_.valor }).eq('id', +id);
+      if (error) return showErr('#pm-erro', traduzErro(error));
+      sairEdicaoPlano(); toast('Plano atualizado ✔');
+    } else {
+      const v = mtVeiculos.find(x => String(x.id) === $('#pm-veiculo').value);
+      if (!v) return showErr('#pm-erro', 'Selecione o veículo.');
+      const ultKm = $('#pm-ultkm').value.trim() ? parseNum($('#pm-ultkm').value) : v.km_atual;
+      if (ultKm == null || ultKm < 0) return showErr('#pm-erro', 'Confira o KM da última vez.');
+      const { data: novo, error } = await sb.from('planos_manutencao')
+        .insert({ veiculo_id: v.id, nome, intervalo_km: ik.valor, intervalo_dias: id_.valor }).select('id').single();
+      if (error) return showErr('#pm-erro', traduzErro(error));
+      // ponto de partida: a contagem do plano começa na "última vez" informada
+      const { error: e2 } = await sb.from('manutencoes').insert({
+        veiculo_id: v.id, plano_id: novo.id, data_manutencao: $('#pm-ultdata').value || hoje(),
+        km: ultKm, custo: 0, descricao: BASE + ' (informado)'
+      });
+      if (e2) { showErr('#pm-erro', 'Plano criado, mas não consegui registrar o ponto de partida: ' + traduzErro(e2)); renderManut(); return; }
+      sairEdicaoPlano(); toast('Plano criado ✔');
+    }
+    $('#novo-plano').open = false;
+    renderManut();
+  } finally { btn.disabled = false; }
+});
+
+/* ---- Cliques nas listas (registrar, editar, desativar, excluir) ---- */
+$('#view-manut').addEventListener('click', async e => {
+  const b = e.target.closest('button[data-acao]');
+  if (!b) return;
+  const acao = b.dataset.acao, id = +b.dataset.id;
+  if (acao === 'registrar') return abrirRegistro(+b.dataset.veic, +b.dataset.plano);
+  if (acao === 'editar-plano') return editarPlano(id);
+  b.disabled = true;
+  if (acao === 'toggle-plano') {
+    const { error } = await sb.from('planos_manutencao').update({ ativo: b.dataset.ativo === 'false' }).eq('id', id);
+    if (error) { b.disabled = false; return toast(traduzErro(error)); }
+    toast(b.dataset.ativo === 'false' ? 'Plano reativado ✔' : 'Plano desativado ✔');
+  } else if (acao === 'excluir-manut') {
+    if (!confirm('Excluir este registro de manutenção? O custo do mês e os alertas serão recalculados.')) { b.disabled = false; return; }
+    const { error } = await sb.from('manutencoes').delete().eq('id', id);
+    if (error) { b.disabled = false; return toast(traduzErro(error)); }
+    toast('Registro excluído ✔');
+  }
+  renderManut();
 });
 
 init();
